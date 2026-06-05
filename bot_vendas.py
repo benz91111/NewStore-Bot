@@ -309,7 +309,8 @@ class PagamentoButton(Button):
 
         # Cria embed de pagamento na DM
         try:
-            total = float(prod['preco'].replace("R$", "").replace("$", "").replace(",", ".").strip()) * carrinho['quantidade_desejada']
+            preco_limpo = prod['preco'].replace("R$", "").replace("$", "").replace(",", ".").strip()
+            total = float(preco_limpo) * carrinho['quantidade_desejada']
             total_str = "R$ " + str(total)
         except:
             total_str = prod['preco'] + " x " + str(carrinho['quantidade_desejada'])
@@ -331,6 +332,90 @@ class PagamentoButton(Button):
 
         await interaction.user.send(embed=dm_embed, view=view)
         await interaction.response.send_message("Enviei os dados de pagamento na sua DM!", ephemeral=True)
+
+class ConfirmarCarrinhoButton(Button):
+    def __init__(self, carrinho_id):
+        super().__init__(label="Confirmar Compra", emoji=E["confirmar"], style=discord.ButtonStyle.success)
+        self.carrinho_id = carrinho_id
+
+    async def callback(self, interaction: discord.Interaction):
+        # Verifica se eh staff
+        staff_role = interaction.guild.get_role(STAFF_ROLE_ID)
+        if not staff_role or staff_role not in interaction.user.roles:
+            await interaction.response.send_message("Apenas Staff pode confirmar!", ephemeral=True)
+            return
+
+        carrinho = carrinhos.get(self.carrinho_id)
+        if not carrinho:
+            await interaction.response.send_message("Carrinho nao encontrado!", ephemeral=True)
+            return
+
+        if carrinho.get('status') == "confirmado":
+            await interaction.response.send_message("Esta compra ja foi confirmada!", ephemeral=True)
+            return
+
+        prod = next((p for p in produtos.get(carrinho['canal_id'], []) if p['id'] == carrinho['produto_id']), None)
+        if not prod:
+            await interaction.response.send_message("Produto nao encontrado!", ephemeral=True)
+            return
+
+        # Atualiza carrinho
+        carrinho['status'] = "confirmado"
+        carrinho['staff_id'] = interaction.user.id
+        carrinho['staff_name'] = interaction.user.name
+        salvar_json(CARRINHOS_FILE, carrinhos)
+
+        # Diminui estoque
+        qtd = carrinho.get('quantidade_desejada', 1)
+        for p in produtos.get(carrinho['canal_id'], []):
+            if p['id'] == carrinho['produto_id']:
+                p['quantidade'] -= qtd
+                p['vendidos'] += qtd
+                break
+        salvar_json(DATA_FILE, produtos)
+
+        # Atualiza painel
+        channel = bot.get_channel(int(carrinho['canal_id']))
+        if channel:
+            await atualizar_painel(channel)
+
+        # Embed de confirmacao no carrinho
+        embed = discord.Embed(
+            title=E["confirmar"] + " **Compra Confirmada!**",
+            description="Carrinho confirmado por " + interaction.user.mention,
+            color=discord.Color.green()
+        )
+        embed.add_field(name=E["usuario"] + " Cliente", value="<@" + str(carrinho['user_id']) + "> (" + carrinho['user_name'] + ")", inline=True)
+        embed.add_field(name=E["produto"] + " Produto", value=prod['nome'], inline=True)
+        embed.add_field(name=E["quantidade"] + " Quantidade", value=str(qtd), inline=True)
+        embed.add_field(name=E["preco"] + " Preco", value=prod['preco'], inline=True)
+        embed.set_footer(text="Confirmado por: " + interaction.user.name, icon_url=IMG["double_check"])
+        await interaction.response.send_message(embed=embed)
+
+        # Envia para canal de vendas finalizadas
+        vendas_channel = bot.get_channel(VENDAS_CANAL_ID)
+        if vendas_channel:
+            vendas_embed = discord.Embed(title="Venda Finalizada!", description="Nova venda confirmada!", color=0x820AD1)
+            vendas_embed.set_author(name="New Store", icon_url=IMG["nubank"])
+            vendas_embed.add_field(name="Usuario", value="`" + carrinho['user_name'] + "`", inline=True)
+            vendas_embed.add_field(name="Produto", value="`" + prod['nome'] + "`", inline=True)
+            vendas_embed.add_field(name="Quantidade", value="`" + str(qtd) + "`", inline=True)
+            vendas_embed.add_field(name="Preco", value="`" + prod['preco'] + "`", inline=True)
+            vendas_embed.add_field(name="Staff", value="`" + interaction.user.name + "`", inline=True)
+            vendas_embed.add_field(name="Data", value="`" + discord.utils.utcnow().strftime('%d/%m/%Y %H:%M') + "`", inline=True)
+            vendas_embed.set_footer(text="Vem Decolar, Vem com a New Store!", icon_url=IMG["nubank"])
+            vendas_embed.set_image(url=IMG["banner"])
+            await vendas_channel.send(embed=vendas_embed)
+
+        # Deleta o canal do carrinho apos 10 segundos
+        import asyncio
+        await asyncio.sleep(10)
+        canal = bot.get_channel(int(self.carrinho_id))
+        if canal:
+            await canal.delete()
+        if self.carrinho_id in carrinhos:
+            del carrinhos[self.carrinho_id]
+            salvar_json(CARRINHOS_FILE, carrinhos)
 
 class PixButton(Button):
     def __init__(self, carrinho_id):
@@ -630,6 +715,7 @@ class ProdutoDropdown(Select):
             view.add_item(MaisButton(carrinho_id))
             view.add_item(RemoverButton(carrinho_id))
             view.add_item(PagamentoButton(carrinho_id))
+            view.add_item(ConfirmarCarrinhoButton(carrinho_id))
 
             await novo_canal.send(content=interaction.user.mention + " | " + (staff_role.mention if staff_role else "@Staff"), embed=embed, view=view)
             await interaction.response.send_message("Carrinho criado em " + novo_canal.mention + "!", ephemeral=True)
@@ -683,6 +769,7 @@ async def atualizar_embed_carrinho(canal, carrinho):
     view.add_item(MaisButton(str(canal.id)))
     view.add_item(RemoverButton(str(canal.id)))
     view.add_item(PagamentoButton(str(canal.id)))
+    view.add_item(ConfirmarCarrinhoButton(str(canal.id)))
 
     async for msg in canal.history(limit=10):
         if msg.author == bot.user and msg.embeds and "New Store | Vendas" in msg.embeds[0].title:
