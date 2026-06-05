@@ -42,6 +42,13 @@ IMG = {
     "less18": "https://i.imgur.com/8GUnzM0.png",
     "dnd": "https://i.imgur.com/955eTnK.png",
     "banner": "https://i.imgur.com/jDo23VT.png",
+    "joinha": "https://i.imgur.com/FqhP6sC.png",
+    "nova_compra": "https://i.imgur.com/9zT98Dk.png",
+    "usuario_icon": "https://i.imgur.com/hhd3ryP.png",
+    "produto_icon": "https://i.imgur.com/hBeTCwq.png",
+    "preco_icon": "https://i.imgur.com/Z7x0f65.png",
+    "descricao_icon": "https://i.imgur.com/raLUTTf.png",
+    "gif_status": "https://i.imgur.com/a3MHzuC.gif",
 }
 
 # ===== FUNCOES AUXILIARES =====
@@ -327,38 +334,39 @@ class ProdutoDropdown(Select):
             tickets.append(ticket)
             salvar_json(TICKETS_FILE, tickets)
 
-            # Cria embed do ticket
+            # Cria embed do ticket com imagens nos campos
             embed = discord.Embed(
                 title="Ticket de Venda #" + str(ticket_id),
                 description="Nova compra iniciada!",
                 color=0x820AD1
             )
-            embed.set_thumbnail(url=IMG["nubank"])
+            embed.set_thumbnail(url=IMG["nova_compra"])
             embed.add_field(
-                name="Usuario",
-                value=interaction.user.mention + " (" + interaction.user.name + ")",
+                name="👤 Usuario",
+                value=interaction.user.mention + " (`" + interaction.user.name + "`)",
                 inline=False
             )
             embed.add_field(
-                name="Produto",
+                name="📦 Produto",
                 value="**" + prod['nome'] + "**",
                 inline=True
             )
             embed.add_field(
-                name="Preco",
-                value=prod['preco'],
+                name="💰 Preco",
+                value="`" + prod['preco'] + "`",
                 inline=True
             )
             embed.add_field(
-                name="Descricao",
+                name="📝 Descricao",
                 value=prod['descricao'],
                 inline=False
             )
             embed.add_field(
-                name="Status",
-                value="Aguardando confirmacao da Staff",
+                name="⏳ Status",
+                value="`Aguardando confirmacao da Staff`",
                 inline=False
             )
+            embed.set_image(url=IMG["gif_status"])
             embed.set_footer(
                 text="ID: " + str(ticket_id) + " | Aguarde a Staff confirmar",
                 icon_url=IMG["cart"]
@@ -372,12 +380,45 @@ class ProdutoDropdown(Select):
             view = View()
             view.add_item(ConfirmarCompraButton(ticket_id))
 
-            msg_text = interaction.user.mention + " iniciou uma compra!\n" + staff_mention + " aguarde confirmacao."
+            # Envia mensagem publica no canal
+            msg_text = interaction.user.mention + " iniciou uma compra!" + chr(10) + staff_mention + " aguarde confirmacao."
             await interaction.response.send_message(
                 msg_text,
                 embed=embed,
                 view=view
             )
+
+            # Envia DM privado para o comprador
+            try:
+                dm_embed = discord.Embed(
+                    title="Sua Compra #" + str(ticket_id),
+                    description="Ola " + interaction.user.mention + "! Sua compra foi iniciada.",
+                    color=0x820AD1
+                )
+                dm_embed.set_thumbnail(url=IMG["nova_compra"])
+                dm_embed.add_field(
+                    name="📦 Produto",
+                    value="**" + prod['nome'] + "**",
+                    inline=True
+                )
+                dm_embed.add_field(
+                    name="💰 Preco",
+                    value="`" + prod['preco'] + "`",
+                    inline=True
+                )
+                dm_embed.add_field(
+                    name="⏳ Status",
+                    value="`Aguardando confirmacao da Staff`",
+                    inline=False
+                )
+                dm_embed.set_image(url=IMG["gif_status"])
+                dm_embed.set_footer(
+                    text="Aguarde a Staff confirmar sua compra",
+                    icon_url=IMG["cart"]
+                )
+                await interaction.user.send(embed=dm_embed)
+            except:
+                pass
 
         elif self.modo == "editar":
             view = View()
@@ -385,7 +426,7 @@ class ProdutoDropdown(Select):
             view.add_item(ExcluirButton(prod_id, self.canal_id))
             view.add_item(VoltarButton(self.canal_id))
 
-            desc_text = "Preco: " + prod['preco'] + "\nEstoque: " + str(prod['quantidade']) + "\nVendidos: " + str(prod['vendidos'])
+            desc_text = "Preco: " + prod['preco'] + chr(10) + "Estoque: " + str(prod['quantidade']) + chr(10) + "Vendidos: " + str(prod['vendidos'])
             embed = discord.Embed(
                 title="Editar: " + prod['nome'],
                 description=desc_text,
@@ -630,6 +671,7 @@ class ReporDropdown(Select):
 
 # ===== FUNCAO AUXILIAR: ATUALIZAR PAINEL =====
 async def atualizar_painel(channel):
+    """Atualiza o painel do canal se existir"""
     canal_id = str(channel.id)
     config = paineis.get(canal_id)
     if not config:
@@ -640,31 +682,32 @@ async def atualizar_painel(channel):
     total_estoque = sum(p['quantidade'] for p in lista)
     total_vendidos = sum(p['vendidos'] for p in lista)
 
+    desc = "> " + config['descricao'] + chr(10) + chr(10) + "`━━━━━━━━━━━━━━━━━━━━━━`"
     embed = discord.Embed(
-        title=config['titulo'],
-        description=config['descricao'],
+        title="**" + config['titulo'] + "**",
+        description=desc,
         color=config['cor']
     )
     embed.set_author(name="New Store", icon_url=IMG["nubank"])
 
     if lista:
         for prod in lista[:10]:
-            status = "Disponivel" if prod['quantidade'] > 0 else "Esgotado"
+            status = "`🟢 Disponivel`" if prod['quantidade'] > 0 else "`🔴 Esgotado`"
             if prod['quantidade'] > 0 and prod['quantidade'] <= 3:
-                status = "Poucas unidades!"
+                status = "`🟡 Poucas unidades!`"
 
-            valor = prod['preco'] + " | Estoque: " + str(prod['quantidade']) + " | " + status
+            valor = "💰 `" + prod['preco'] + "` | 📦 `" + str(prod['quantidade']) + "` em estoque | " + status
             embed.add_field(
-                name=str(prod['id']) + ". " + prod['nome'] + " (" + prod['categoria'] + ")",
+                name="`" + str(prod['id']) + "` 📦 **" + prod['nome'] + "** (" + prod['categoria'] + ")",
                 value=valor,
                 inline=False
             )
     else:
-        embed.add_field(name="---", value="Nenhum produto cadastrado ainda.", inline=False)
+        embed.add_field(name="📭 `Sem produtos`", value="Nenhum produto cadastrado ainda. Use `/adicionar` para começar!", inline=False)
 
     embed.add_field(
-        name="Resumo",
-        value="Produtos: " + str(total_produtos) + " | Estoque: " + str(total_estoque) + " | Vendidos: " + str(total_vendidos),
+        name="`━━━━━━━━━━━━━━━━━━━━━━`",
+        value="📊 **Resumo**" + chr(10) + "📦 Produtos: `" + str(total_produtos) + "` | 📦 Estoque: `" + str(total_estoque) + "` | ✅ Vendidos: `" + str(total_vendidos) + "`",
         inline=False
     )
 
@@ -677,7 +720,7 @@ async def atualizar_painel(channel):
 
     # Procura mensagem do bot para editar
     async for msg in channel.history(limit=50):
-        if msg.author == bot.user and msg.embeds and msg.embeds[0].title == config['titulo']:
+        if msg.author == bot.user and msg.embeds and msg.embeds[0].title == "**" + config['titulo'] + "**":
             view = View()
             view.add_item(ProdutoDropdown(canal_id, modo="comprar"))
             await msg.edit(embed=embed, view=view)
@@ -710,31 +753,32 @@ async def painel(interaction: discord.Interaction):
     total_estoque = sum(p['quantidade'] for p in lista)
     total_vendidos = sum(p['vendidos'] for p in lista)
 
+    desc = "> " + config['descricao'] + chr(10) + chr(10) + "`━━━━━━━━━━━━━━━━━━━━━━`"
     embed = discord.Embed(
-        title=config['titulo'],
-        description=config['descricao'],
+        title="**" + config['titulo'] + "**",
+        description=desc,
         color=config['cor']
     )
     embed.set_author(name="New Store", icon_url=IMG["nubank"])
 
     if lista:
         for prod in lista[:10]:
-            status = "Disponivel" if prod['quantidade'] > 0 else "Esgotado"
+            status = "`🟢 Disponivel`" if prod['quantidade'] > 0 else "`🔴 Esgotado`"
             if prod['quantidade'] > 0 and prod['quantidade'] <= 3:
-                status = "Poucas unidades!"
+                status = "`🟡 Poucas unidades!`"
 
-            valor = prod['preco'] + " | Estoque: " + str(prod['quantidade']) + " | " + status
+            valor = "💰 `" + prod['preco'] + "` | 📦 `" + str(prod['quantidade']) + "` em estoque | " + status
             embed.add_field(
-                name=str(prod['id']) + ". " + prod['nome'] + " (" + prod['categoria'] + ")",
+                name="`" + str(prod['id']) + "` 📦 **" + prod['nome'] + "** (" + prod['categoria'] + ")",
                 value=valor,
                 inline=False
             )
     else:
-        embed.add_field(name="---", value="Nenhum produto cadastrado ainda.", inline=False)
+        embed.add_field(name="📭 `Sem produtos`", value="Nenhum produto cadastrado ainda. Use `/adicionar` para começar!", inline=False)
 
     embed.add_field(
-        name="Resumo",
-        value="Produtos: " + str(total_produtos) + " | Estoque: " + str(total_estoque) + " | Vendidos: " + str(total_vendidos),
+        name="`━━━━━━━━━━━━━━━━━━━━━━`",
+        value="📊 **Resumo**" + chr(10) + "📦 Produtos: `" + str(total_produtos) + "` | 📦 Estoque: `" + str(total_estoque) + "` | ✅ Vendidos: `" + str(total_vendidos) + "`",
         inline=False
     )
 
