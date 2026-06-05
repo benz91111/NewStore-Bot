@@ -45,6 +45,24 @@ E = {
     "disponivel": "<:emoji_24:1512466459832614993>",
 }
 
+# ===== EMOJIS DE MARCAS (PRODUTOS) =====
+EMOJIS_MARCAS = {
+    "netflix": "<:emoji_30:1512511475963396178>",
+    "crunchyroll": "<:emoji_31:1512511500676235315>",
+    "hbo max": "<:emoji_33:1512512537823023244>",
+    "prime video": "<:emoji_34:1512512868623323191>",
+    "disney": "<:emoji_32:1512512515525836892>",
+    "paramount": "<:emoji_35:1512512887321526393>",
+}
+
+def detectar_emoji_produto(nome_produto):
+    """Detecta automaticamente o emoji baseado no nome do produto"""
+    nome_lower = nome_produto.lower()
+    for marca, emoji in EMOJIS_MARCAS.items():
+        if marca in nome_lower:
+            return emoji
+    return E["produto"]
+
 # ===== IMAGENS DO IMGUR =====
 IMG = {
     "banner": "https://i.imgur.com/jDo23VT.png",
@@ -103,6 +121,9 @@ class ProdutoModal(Modal, title="Adicionar Produto"):
         if canal_id not in produtos:
             produtos[canal_id] = []
 
+        # Detecta emoji automaticamente pelo nome
+        emoji_produto = detectar_emoji_produto(self.nome.value.strip())
+
         produto_id = len(produtos[canal_id]) + 1
         produto = {
             "id": produto_id,
@@ -111,7 +132,8 @@ class ProdutoModal(Modal, title="Adicionar Produto"):
             "preco": self.preco.value.strip(),
             "quantidade": qtd,
             "categoria": self.categoria.value.strip() if self.categoria.value else "Geral",
-            "vendidos": 0
+            "vendidos": 0,
+            "emoji": emoji_produto
         }
         produtos[canal_id].append(produto)
         salvar_json(DATA_FILE, produtos)
@@ -122,6 +144,7 @@ class ProdutoModal(Modal, title="Adicionar Produto"):
         embed.add_field(name="Preco", value=produto['preco'], inline=True)
         embed.add_field(name="Estoque", value=str(produto['quantidade']), inline=True)
         embed.add_field(name="Categoria", value=produto['categoria'], inline=True)
+        embed.add_field(name="Emoji", value=produto['emoji'], inline=True)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 class EditarProdutoModal(Modal, title="Editar Produto"):
@@ -136,12 +159,14 @@ class EditarProdutoModal(Modal, title="Editar Produto"):
             self.preco.default = prod['preco']
             self.quantidade.default = str(prod['quantidade'])
             self.categoria.default = prod['categoria']
+            self.emoji.default = prod.get('emoji', detectar_emoji_produto(prod['nome']))
 
     nome = TextInput(label="Nome", max_length=50)
     descricao = TextInput(label="Descricao", style=discord.TextStyle.paragraph, max_length=400)
     preco = TextInput(label="Preco", max_length=20)
     quantidade = TextInput(label="Quantidade", max_length=10)
     categoria = TextInput(label="Categoria", required=False, max_length=30)
+    emoji = TextInput(label="Emoji (opcional)", placeholder="Ex: <:netflix:123456789>", required=False, max_length=100)
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
@@ -160,6 +185,10 @@ class EditarProdutoModal(Modal, title="Editar Produto"):
                 p['preco'] = self.preco.value.strip()
                 p['quantidade'] = qtd
                 p['categoria'] = self.categoria.value.strip() if self.categoria.value else "Geral"
+                if self.emoji.value and self.emoji.value.strip():
+                    p['emoji'] = self.emoji.value.strip()
+                else:
+                    p['emoji'] = detectar_emoji_produto(p['nome'])
                 break
         salvar_json(DATA_FILE, produtos)
         channel = bot.get_channel(int(self.canal_id))
@@ -224,7 +253,6 @@ class QuantidadeModal(Modal, title="Quantidade Desejada"):
         carrinho['quantidade_desejada'] = qtd
         salvar_json(CARRINHOS_FILE, carrinhos)
 
-        # Atualiza embed do carrinho
         canal = bot.get_channel(int(self.carrinho_id))
         if canal:
             await atualizar_embed_carrinho(canal, carrinho)
@@ -307,7 +335,6 @@ class PagamentoButton(Button):
             await interaction.response.send_message("Produto nao encontrado!", ephemeral=True)
             return
 
-        # Cria embed de pagamento na DM
         try:
             preco_limpo = prod['preco'].replace("R$", "").replace("$", "").replace(",", ".").strip()
             total = float(preco_limpo) * carrinho['quantidade_desejada']
@@ -339,7 +366,6 @@ class ConfirmarCarrinhoButton(Button):
         self.carrinho_id = carrinho_id
 
     async def callback(self, interaction: discord.Interaction):
-        # Verifica se eh staff
         staff_role = interaction.guild.get_role(STAFF_ROLE_ID)
         if not staff_role or staff_role not in interaction.user.roles:
             await interaction.response.send_message("Apenas Staff pode confirmar!", ephemeral=True)
@@ -359,13 +385,11 @@ class ConfirmarCarrinhoButton(Button):
             await interaction.response.send_message("Produto nao encontrado!", ephemeral=True)
             return
 
-        # Atualiza carrinho
         carrinho['status'] = "confirmado"
         carrinho['staff_id'] = interaction.user.id
         carrinho['staff_name'] = interaction.user.name
         salvar_json(CARRINHOS_FILE, carrinhos)
 
-        # Diminui estoque
         qtd = carrinho.get('quantidade_desejada', 1)
         for p in produtos.get(carrinho['canal_id'], []):
             if p['id'] == carrinho['produto_id']:
@@ -374,12 +398,10 @@ class ConfirmarCarrinhoButton(Button):
                 break
         salvar_json(DATA_FILE, produtos)
 
-        # Atualiza painel
         channel = bot.get_channel(int(carrinho['canal_id']))
         if channel:
             await atualizar_painel(channel)
 
-        # Embed de confirmacao no carrinho
         embed = discord.Embed(
             title=E["confirmar"] + " **Compra Confirmada!**",
             description="Carrinho confirmado por " + interaction.user.mention,
@@ -392,7 +414,6 @@ class ConfirmarCarrinhoButton(Button):
         embed.set_footer(text="Confirmado por: " + interaction.user.name, icon_url=IMG["double_check"])
         await interaction.response.send_message(embed=embed)
 
-        # Envia para canal de vendas finalizadas
         vendas_channel = bot.get_channel(VENDAS_CANAL_ID)
         if vendas_channel:
             vendas_embed = discord.Embed(title="Venda Finalizada!", description="Nova venda confirmada!", color=0x820AD1)
@@ -407,7 +428,6 @@ class ConfirmarCarrinhoButton(Button):
             vendas_embed.set_image(url=IMG["banner"])
             await vendas_channel.send(embed=vendas_embed)
 
-        # Deleta o canal do carrinho apos 10 segundos
         import asyncio
         await asyncio.sleep(10)
         canal = bot.get_channel(int(self.carrinho_id))
@@ -494,7 +514,6 @@ class ConfirmarCompraButton(Button):
         embed.set_footer(text="Confirmado por: " + interaction.user.name, icon_url=IMG["double_check"])
         await interaction.response.send_message(embed=embed)
 
-        # Envia para canal de vendas finalizadas
         vendas_channel = bot.get_channel(VENDAS_CANAL_ID)
         if vendas_channel:
             vendas_embed = discord.Embed(title="Venda Finalizada!", description="Nova venda confirmada!", color=0x820AD1)
@@ -548,7 +567,7 @@ class AdicionarButton(Button):
 
 class ConfigPainelButton(Button):
     def __init__(self):
-        super().__init__(label="Configurar Painel", emoji=E["config"], style=discord.ButtonStyle.primary)
+        super().__init__(label="Configurar Painel", emoji=E["logo"], style=discord.ButtonStyle.primary)
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(PainelModal())
 
@@ -563,7 +582,7 @@ class GerenciarButton(Button):
 
 class ReporButton(Button):
     def __init__(self, canal_id):
-        super().__init__(label="Repor Estoque", emoji=E["repor"], style=discord.ButtonStyle.success)
+        super().__init__(label="Repor Estoque", emoji=E["disponivel"], style=discord.ButtonStyle.success)
         self.canal_id = canal_id
     async def callback(self, interaction: discord.Interaction):
         view = View()
@@ -575,10 +594,11 @@ class ReporDropdown(Select):
         self.canal_id = canal_id
         options = []
         for prod in produtos.get(canal_id, []):
+            emoji = prod.get('emoji', E["produto"])
             options.append(discord.SelectOption(
                 label=prod['nome'] + " - Estoque: " + str(prod['quantidade']),
                 value=str(prod['id']),
-                emoji=E["produto"]
+                emoji=emoji
             ))
         if not options:
             options.append(discord.SelectOption(label="Sem produtos", value="none"))
@@ -607,6 +627,9 @@ class ProdutoDropdown(Select):
         options = []
         lista = produtos.get(canal_id, [])
         for prod in lista:
+            # USA O EMOJI DO PRODUTO (novo) ou detecta automaticamente
+            emoji_produto = prod.get('emoji', detectar_emoji_produto(prod['nome']))
+
             if prod['quantidade'] > 0 or modo == "editar":
                 label = prod['nome'] + " - " + prod['preco']
                 if prod['quantidade'] <= 3 and prod['quantidade'] > 0:
@@ -617,7 +640,7 @@ class ProdutoDropdown(Select):
                     label=label[:100],
                     description="Estoque: " + str(prod['quantidade']) + " | Vendidos: " + str(prod['vendidos']),
                     value=str(prod['id']),
-                    emoji=E["carrinho"] if prod['quantidade'] > 0 else E["lixeira"]
+                    emoji=emoji_produto  # AQUI ESTA O EMOJI DA MARCA!
                 ))
         if not options:
             options.append(discord.SelectOption(
@@ -725,7 +748,10 @@ class ProdutoDropdown(Select):
             view.add_item(EditarButton(prod_id, self.canal_id))
             view.add_item(ExcluirButton(prod_id, self.canal_id))
             view.add_item(VoltarButton(self.canal_id))
-            desc_text = "Preco: " + prod['preco'] + chr(10) + "Estoque: " + str(prod['quantidade']) + chr(10) + "Vendidos: " + str(prod['vendidos'])
+            desc_text = "Preco: " + prod['preco'] + "
+Estoque: " + str(prod['quantidade']) + "
+Vendidos: " + str(prod['vendidos']) + "
+Emoji: " + prod.get('emoji', detectar_emoji_produto(prod['nome']))
             embed = discord.Embed(title="Editar: " + prod['nome'], description=desc_text, color=discord.Color.blue())
             embed.set_thumbnail(url=IMG["hammer"])
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
@@ -787,21 +813,25 @@ async def atualizar_painel(channel):
     total_estoque = sum(p['quantidade'] for p in lista)
     total_vendidos = sum(p['vendidos'] for p in lista)
 
-    desc = "> " + config['descricao'] + chr(10) + chr(10) + "`━━━━━━━━━━━━━━━━━━━━━━`"
+    desc = "> " + config['descricao'] + "
+
+`━━━━━━━━━━━━━━━━━━━━━━`"
     embed = discord.Embed(title="**" + config['titulo'] + "**", description=desc, color=config['cor'])
     embed.set_author(name="New Store", icon_url=IMG["nubank"])
 
     if lista:
         for prod in lista[:10]:
+            emoji_produto = prod.get('emoji', detectar_emoji_produto(prod['nome']))
             status = "`" + E["disponivel"] + " Disponivel`" if prod['quantidade'] > 0 else "`" + E["lixeira"] + " Esgotado`"
             if prod['quantidade'] > 0 and prod['quantidade'] <= 3:
                 status = "`" + E["status"] + " Poucas unidades!`"
             valor = E["preco"] + " `" + prod['preco'] + "` | " + E["produto"] + " `" + str(prod['quantidade']) + "` em estoque | " + status
-            embed.add_field(name="`" + str(prod['id']) + "` " + E["produto"] + " **" + prod['nome'] + "** (" + prod['categoria'] + ")", value=valor, inline=False)
+            embed.add_field(name="`" + str(prod['id']) + "` " + emoji_produto + " **" + prod['nome'] + "** (" + prod['categoria'] + ")", value=valor, inline=False)
     else:
         embed.add_field(name=E["lixeira"] + " `Sem produtos`", value="Nenhum produto cadastrado. Use `/adicionar`!", inline=False)
 
-    embed.add_field(name="`━━━━━━━━━━━━━━━━━━━━━━`", value=E["logo"] + " **Resumo**" + chr(10) + E["produto"] + " Produtos: `" + str(total_produtos) + "` | " + E["produto"] + " Estoque: `" + str(total_estoque) + "` | " + E["confirmar"] + " Vendidos: `" + str(total_vendidos) + "`", inline=False)
+    embed.add_field(name="`━━━━━━━━━━━━━━━━━━━━━━`", value=E["logo"] + " **Resumo**
+" + E["produto"] + " Produtos: `" + str(total_produtos) + "` | " + E["produto"] + " Estoque: `" + str(total_estoque) + "` | " + E["confirmar"] + " Vendidos: `" + str(total_vendidos) + "`", inline=False)
 
     if config.get('imagem'):
         embed.set_image(url=config['imagem'])
@@ -839,21 +869,25 @@ async def painel(interaction: discord.Interaction):
     total_estoque = sum(p['quantidade'] for p in lista)
     total_vendidos = sum(p['vendidos'] for p in lista)
 
-    desc = "> " + config['descricao'] + chr(10) + chr(10) + "`━━━━━━━━━━━━━━━━━━━━━━`"
+    desc = "> " + config['descricao'] + "
+
+`━━━━━━━━━━━━━━━━━━━━━━`"
     embed = discord.Embed(title="**" + config['titulo'] + "**", description=desc, color=config['cor'])
     embed.set_author(name="New Store", icon_url=IMG["nubank"])
 
     if lista:
         for prod in lista[:10]:
+            emoji_produto = prod.get('emoji', detectar_emoji_produto(prod['nome']))
             status = "`" + E["disponivel"] + " Disponivel`" if prod['quantidade'] > 0 else "`" + E["lixeira"] + " Esgotado`"
             if prod['quantidade'] > 0 and prod['quantidade'] <= 3:
                 status = "`" + E["status"] + " Poucas unidades!`"
             valor = E["preco"] + " `" + prod['preco'] + "` | " + E["produto"] + " `" + str(prod['quantidade']) + "` em estoque | " + status
-            embed.add_field(name="`" + str(prod['id']) + "` " + E["produto"] + " **" + prod['nome'] + "** (" + prod['categoria'] + ")", value=valor, inline=False)
+            embed.add_field(name="`" + str(prod['id']) + "` " + emoji_produto + " **" + prod['nome'] + "** (" + prod['categoria'] + ")", value=valor, inline=False)
     else:
         embed.add_field(name=E["lixeira"] + " `Sem produtos`", value="Nenhum produto cadastrado. Use `/adicionar`!", inline=False)
 
-    embed.add_field(name="`━━━━━━━━━━━━━━━━━━━━━━`", value=E["logo"] + " **Resumo**" + chr(10) + E["produto"] + " Produtos: `" + str(total_produtos) + "` | " + E["produto"] + " Estoque: `" + str(total_estoque) + "` | " + E["confirmar"] + " Vendidos: `" + str(total_vendidos) + "`", inline=False)
+    embed.add_field(name="`━━━━━━━━━━━━━━━━━━━━━━`", value=E["logo"] + " **Resumo**
+" + E["produto"] + " Produtos: `" + str(total_produtos) + "` | " + E["produto"] + " Estoque: `" + str(total_estoque) + "` | " + E["confirmar"] + " Vendidos: `" + str(total_vendidos) + "`", inline=False)
 
     if config.get('imagem'):
         embed.set_image(url=config['imagem'])
@@ -900,7 +934,8 @@ async def estoque(interaction: discord.Interaction):
     embed = discord.Embed(title="Estoque", description="Canal: " + interaction.channel.name, color=discord.Color.blue())
     embed.set_thumbnail(url=IMG["cardbox"])
     for prod in lista:
-        embed.add_field(name=prod['nome'], value=prod['preco'] + " | Estoque: " + str(prod['quantidade']) + " | Vendidos: " + str(prod['vendidos']), inline=True)
+        emoji = prod.get('emoji', detectar_emoji_produto(prod['nome']))
+        embed.add_field(name=emoji + " " + prod['nome'], value=prod['preco'] + " | Estoque: " + str(prod['quantidade']) + " | Vendidos: " + str(prod['vendidos']), inline=True)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="admin", description="Painel de administracao completo")
