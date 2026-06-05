@@ -121,7 +121,6 @@ class ProdutoModal(Modal, title="Adicionar Produto"):
         if canal_id not in produtos:
             produtos[canal_id] = []
 
-        # Detecta emoji automaticamente pelo nome
         emoji_produto = detectar_emoji_produto(self.nome.value.strip())
 
         produto_id = len(produtos[canal_id]) + 1
@@ -748,10 +747,7 @@ class ProdutoDropdown(Select):
             view.add_item(EditarButton(prod_id, self.canal_id))
             view.add_item(ExcluirButton(prod_id, self.canal_id))
             view.add_item(VoltarButton(self.canal_id))
-            desc_text = "Preco: " + prod['preco'] + "
-Estoque: " + str(prod['quantidade']) + "
-Vendidos: " + str(prod['vendidos']) + "
-Emoji: " + prod.get('emoji', detectar_emoji_produto(prod['nome']))
+            desc_text = "Preco: " + prod['preco'] + chr(10) + "Estoque: " + str(prod['quantidade']) + chr(10) + "Vendidos: " + str(prod['vendidos']) + chr(10) + "Emoji: " + prod.get('emoji', detectar_emoji_produto(prod['nome']))
             embed = discord.Embed(title="Editar: " + prod['nome'], description=desc_text, color=discord.Color.blue())
             embed.set_thumbnail(url=IMG["hammer"])
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
@@ -813,9 +809,7 @@ async def atualizar_painel(channel):
     total_estoque = sum(p['quantidade'] for p in lista)
     total_vendidos = sum(p['vendidos'] for p in lista)
 
-    desc = "> " + config['descricao'] + "
-
-`━━━━━━━━━━━━━━━━━━━━━━`"
+    desc = "> " + config['descricao'] + chr(10) + chr(10) + "`━━━━━━━━━━━━━━━━━━━━━━`"
     embed = discord.Embed(title="**" + config['titulo'] + "**", description=desc, color=config['cor'])
     embed.set_author(name="New Store", icon_url=IMG["nubank"])
 
@@ -830,8 +824,7 @@ async def atualizar_painel(channel):
     else:
         embed.add_field(name=E["lixeira"] + " `Sem produtos`", value="Nenhum produto cadastrado. Use `/adicionar`!", inline=False)
 
-    embed.add_field(name="`━━━━━━━━━━━━━━━━━━━━━━`", value=E["logo"] + " **Resumo**
-" + E["produto"] + " Produtos: `" + str(total_produtos) + "` | " + E["produto"] + " Estoque: `" + str(total_estoque) + "` | " + E["confirmar"] + " Vendidos: `" + str(total_vendidos) + "`", inline=False)
+    embed.add_field(name="`━━━━━━━━━━━━━━━━━━━━━━`", value=E["logo"] + " **Resumo**" + chr(10) + E["produto"] + " Produtos: `" + str(total_produtos) + "` | " + E["produto"] + " Estoque: `" + str(total_estoque) + "` | " + E["confirmar"] + " Vendidos: `" + str(total_vendidos) + "`", inline=False)
 
     if config.get('imagem'):
         embed.set_image(url=config['imagem'])
@@ -869,9 +862,7 @@ async def painel(interaction: discord.Interaction):
     total_estoque = sum(p['quantidade'] for p in lista)
     total_vendidos = sum(p['vendidos'] for p in lista)
 
-    desc = "> " + config['descricao'] + "
-
-`━━━━━━━━━━━━━━━━━━━━━━`"
+    desc = "> " + config['descricao'] + chr(10) + chr(10) + "`━━━━━━━━━━━━━━━━━━━━━━`"
     embed = discord.Embed(title="**" + config['titulo'] + "**", description=desc, color=config['cor'])
     embed.set_author(name="New Store", icon_url=IMG["nubank"])
 
@@ -886,8 +877,7 @@ async def painel(interaction: discord.Interaction):
     else:
         embed.add_field(name=E["lixeira"] + " `Sem produtos`", value="Nenhum produto cadastrado. Use `/adicionar`!", inline=False)
 
-    embed.add_field(name="`━━━━━━━━━━━━━━━━━━━━━━`", value=E["logo"] + " **Resumo**
-" + E["produto"] + " Produtos: `" + str(total_produtos) + "` | " + E["produto"] + " Estoque: `" + str(total_estoque) + "` | " + E["confirmar"] + " Vendidos: `" + str(total_vendidos) + "`", inline=False)
+    embed.add_field(name="`━━━━━━━━━━━━━━━━━━━━━━`", value=E["logo"] + " **Resumo**" + chr(10) + E["produto"] + " Produtos: `" + str(total_produtos) + "` | " + E["produto"] + " Estoque: `" + str(total_estoque) + "` | " + E["confirmar"] + " Vendidos: `" + str(total_vendidos) + "`", inline=False)
 
     if config.get('imagem'):
         embed.set_image(url=config['imagem'])
